@@ -23,7 +23,11 @@ func TestMsgpackEncodeTimeDefaultFormat(t *testing.T) {
 		t.Errorf("Failed to encode time %s: %v", stamp, err)
 	}
 
-	expected := []byte{175, 1, 0, 0, 0, 14, 187, 75, 55, 229, 0, 0, 0, 0, 255, 255}
+	// Norca: the fork encodes with go-msgpack v1.1.5, whose default is the
+	// builtin time format (a msgpack timestamp extension), the format raft
+	// v1.5.0 produced under Norca. Upstream expects the go-msgpack v0.5.5
+	// format here.
+	expected := []byte{164, 67, 185, 64, 229}
 
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("Expected time %s to encode as %+v but got %+v", stamp, expected, buf.Bytes())

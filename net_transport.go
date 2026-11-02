@@ -16,7 +16,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-metrics"
-	"github.com/hashicorp/go-msgpack/v2/codec"
+	"github.com/hashicorp/go-msgpack/codec"
 )
 
 const (
@@ -166,6 +166,11 @@ type NetworkTransportConfig struct {
 	// codec to use the new format of time.Time when encoding (used in
 	// go-msgpack v1.1.5 by default). Decoding is not affected, as all
 	// go-msgpack v2.1.0+ decoders know how to decode both formats.
+	//
+	// Norca: this fork encodes and decodes with go-msgpack v1.1.5, the codec
+	// Norca uses for everything else, always with the builtin time format,
+	// the format the raft messages had with raft v1.5.0 under Norca. The
+	// option is kept for API compatibility and has no effect.
 	MsgpackUseNewTimeFormat bool
 }
 
@@ -421,7 +426,9 @@ func (n *NetworkTransport) getConn(target ServerAddress) (*netConn, error) {
 	}
 
 	mp := &codec.MsgpackHandle{}
-	mp.TimeNotBuiltin = !n.msgpackUseNewTimeFormat
+	// Norca: go-msgpack v1.1.5 encodes time.Time as a builtin on both sides,
+	// as raft v1.5.0 did under Norca; see MsgpackUseNewTimeFormat.
+	mp.TimeNotBuiltin = false
 	netConn.enc = codec.NewEncoder(netConn.w, mp)
 
 	// Done
@@ -608,7 +615,9 @@ func (n *NetworkTransport) handleConn(connCtx context.Context, conn net.Conn) {
 	dec := codec.NewDecoder(r, &codec.MsgpackHandle{})
 
 	mp := &codec.MsgpackHandle{}
-	mp.TimeNotBuiltin = !n.msgpackUseNewTimeFormat
+	// Norca: go-msgpack v1.1.5 encodes time.Time as a builtin on both sides,
+	// as raft v1.5.0 did under Norca; see MsgpackUseNewTimeFormat.
+	mp.TimeNotBuiltin = false
 	enc := codec.NewEncoder(w, mp)
 
 	for {

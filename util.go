@@ -12,7 +12,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/hashicorp/go-msgpack/v2/codec"
+	"github.com/hashicorp/go-msgpack/codec"
 )
 
 // returns an int64 from a crypto random source
