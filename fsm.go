@@ -122,6 +122,7 @@ func (r *Raft) runFSM() {
 		// Update the indexes
 		lastIndex = req.log.Index
 		lastTerm = req.log.Term
+		r.setFSMApplied(lastIndex)
 	}
 
 	applyBatch := func(reqs []*commitTuple) {
@@ -168,6 +169,7 @@ func (r *Raft) runFSM() {
 		// Update the indexes
 		lastIndex = lastBatchIndex
 		lastTerm = lastBatchTerm
+		r.setFSMApplied(lastIndex)
 
 		var i int
 		for _, req := range reqs {
@@ -210,6 +212,7 @@ func (r *Raft) runFSM() {
 		// Update the last index and term
 		lastIndex = meta.Index
 		lastTerm = meta.Term
+		r.setFSMApplied(lastIndex)
 		req.respond(nil)
 	}
 

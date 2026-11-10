@@ -102,7 +102,7 @@ const (
 	// ProtocolVersionMin is the minimum protocol version
 	ProtocolVersionMin ProtocolVersion = 0
 	// ProtocolVersionMax is the maximum protocol version
-	ProtocolVersionMax = 3
+	ProtocolVersionMax = 4
 )
 
 // SnapshotVersion is the version of snapshots that this server can understand.
@@ -252,6 +252,18 @@ type Config struct {
 	// Notice: If this is enabled, the log store MUST implement the CommitTrackingLogStore
 	// interface. Otherwise, Raft will fail to start and return ErrIncompatibleLogStore.
 	RestoreCommittedLogs bool
+
+	// AsyncDiskIO enables concurrent local StoreLogs and network replication on the leader (v4).
+	AsyncDiskIO bool
+
+	// MaxPromotionLag specifies the maximum log index lag within which a Nonvoter is considered caught-up.
+	MaxPromotionLag uint64
+
+	// AutoPromoteNonvoter automatically promotes caught-up Nonvoter peers to Voter status.
+	AutoPromoteNonvoter bool
+
+	// TelemetryHook is an optional low-overhead observability callback interface.
+	TelemetryHook TelemetryHook
 
 	// skipStartup allows NewRaft() to bypass all background work goroutines
 	skipStartup bool
