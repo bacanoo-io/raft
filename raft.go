@@ -201,10 +201,6 @@ func (r *Raft) runFollower() {
 			c.configurations = r.configurations.Clone()
 			c.respond(nil)
 
-		case s := <-r.statusCh:
-			r.mainThreadSaturation.working()
-			s.respond(ErrNotLeader)
-
 		case b := <-r.bootstrapCh:
 			r.mainThreadSaturation.working()
 			b.respond(r.liveBootstrap(b.configuration))
@@ -417,10 +413,6 @@ func (r *Raft) runCandidate() {
 			r.mainThreadSaturation.working()
 			c.configurations = r.configurations.Clone()
 			c.respond(nil)
-
-		case s := <-r.statusCh:
-			r.mainThreadSaturation.working()
-			s.respond(ErrNotLeader)
 
 		case b := <-r.bootstrapCh:
 			r.mainThreadSaturation.working()
@@ -940,29 +932,10 @@ func (r *Raft) leaderLoop() {
 				r.dispatchLogs(ready)
 			}
 
-		case s := <-r.statusCh:
-			r.mainThreadSaturation.working()
-			s.peers = r.collectReplicationStatus()
-			s.respond(nil)
-
-		case res := <-r.diskIoCh:
-			r.mainThreadSaturation.working()
-			if res.err != nil {
-				r.logger.Error("async disk write failed, stepping down", "error", res.err)
-				for _, al := range res.applyLogs {
-					al.respond(res.err)
-				}
-				r.setState(Follower)
-				return
-			}
-			r.inflightBuf.deleteUpTo(res.lastIndex)
-			r.leaderState.commitment.match(r.localID, res.lastIndex)
-
 		case <-lease:
 			r.mainThreadSaturation.working()
 			// Check if we've exceeded the lease, potentially stepping down
 			maxDiff := r.checkLeaderLease()
-			r.tryAutoPromoteNonvoters()
 
 			// Next check interval should adjust for the last node we've
 			// contacted, without going negative
@@ -1212,7 +1185,6 @@ func (r *Raft) restoreUserSnapshot(meta *SnapshotMeta, reader io.Reader) error {
 	// this process.
 	r.setLastLog(lastIndex, term)
 	r.setLastApplied(lastIndex)
-	r.setFSMApplied(lastIndex)
 	r.setLastSnapshot(lastIndex, term)
 
 	// Remove old logs if r.logs is a MonotonicLogStore. Log any errors and continue.
@@ -1293,32 +1265,6 @@ func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 
 	commitIndex := r.getCommitIndex()
 	r.tryStageCommitIndex(commitIndex)
-
-	if r.config().AsyncDiskIO {
-		r.inflightBuf.put(logs)
-		r.setLastLog(lastIndex, term)
-		for _, f := range r.leaderState.replState {
-			asyncNotifyCh(f.triggerCh)
-		}
-
-		r.goFunc(func() {
-			startDisk := time.Now()
-			err := r.logs.StoreLogs(logs)
-			if hook := r.config().TelemetryHook; hook != nil {
-				hook.OnDiskSync(n, time.Since(startDisk), err)
-			}
-			select {
-			case r.diskIoCh <- asyncDiskResult{
-				lastIndex: lastIndex,
-				term:      term,
-				applyLogs: applyLogs,
-				err:       err,
-			}:
-			case <-r.shutdownCh:
-			}
-		})
-		return
-	}
 
 	// Write the log entry locally
 	if err := r.logs.StoreLogs(logs); err != nil {
@@ -2006,7 +1952,6 @@ func (r *Raft) installSnapshot(rpc RPC, req *InstallSnapshotRequest) {
 
 	// Update the lastApplied so we don't replay old logs
 	r.setLastApplied(req.LastLogIndex)
-	r.setFSMApplied(req.LastLogIndex)
 
 	// Update the last stable snapshot info
 	r.setLastSnapshot(req.LastLogIndex, req.LastLogTerm)

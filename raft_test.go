@@ -2518,7 +2518,7 @@ func TestRaft_LeaderID_Propagated(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, n := range c.rafts {
-		require.Equal(t, ProtocolVersion(ProtocolVersionMax), n.protocolVersion)
+		require.Equal(t, ProtocolVersion(3), n.protocolVersion)
 		addr, id := n.LeaderWithID()
 		require.NotEmpty(t, id)
 		require.NotEmpty(t, addr)

@@ -230,12 +230,6 @@ type Raft struct {
 	// RestoreCommittedLogs is used to enable restore committed logs mode
 	// restore committed logs mode is disabled if set to false.
 	RestoreCommittedLogs bool
-
-	statusCh        chan *statusFuture
-	diskIoCh        chan asyncDiskResult
-	inflightBuf     *inflightLogBuffer
-	readBatchMu     sync.Mutex
-	activeReadBatch *readIndexBatch
 }
 
 // BootstrapCluster initializes a server's storage with the given cluster
@@ -590,9 +584,6 @@ func NewRaft(conf *Config, fsm FSM, logs LogStore, stable StableStore, snaps Sna
 		preVoteDisabled:       conf.PreVoteDisabled || !transportSupportPreVote,
 		noLegacyTelemetry:     conf.NoLegacyTelemetry,
 		RestoreCommittedLogs:  conf.RestoreCommittedLogs,
-		statusCh:              make(chan *statusFuture, 16),
-		diskIoCh:              make(chan asyncDiskResult, 64),
-		inflightBuf:           newInflightLogBuffer(),
 	}
 	if !transportSupportPreVote && !conf.PreVoteDisabled {
 		r.logger.Warn("pre-vote is disabled because it is not supported by the Transport")
@@ -666,7 +657,6 @@ func (r *Raft) restoreSnapshot() error {
 
 		// Update the lastApplied so we don't replay old logs
 		r.setLastApplied(snapshot.Index)
-		r.setFSMApplied(snapshot.Index)
 
 		// Update the last stable snapshot info
 		r.setLastSnapshot(snapshot.Index, snapshot.Term)
@@ -1228,7 +1218,6 @@ func (r *Raft) Stats() map[string]string {
 		"last_log_term":        toString(lastLogTerm),
 		"commit_index":         toString(r.getCommitIndex()),
 		"applied_index":        toString(r.getLastApplied()),
-		"fsm_applied_index":    toString(r.getFSMApplied()),
 		"fsm_pending":          toString(uint64(len(r.fsmMutateCh))),
 		"last_snapshot_index":  toString(lastSnapIndex),
 		"last_snapshot_term":   toString(lastSnapTerm),

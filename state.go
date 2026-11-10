@@ -58,12 +58,6 @@ type raftState struct {
 	// Last applied log to the FSM
 	lastApplied uint64
 
-	// Last log actually executed by the FSM goroutine
-	fsmApplied uint64
-
-	fsmWaitersLock sync.Mutex
-	fsmWaiters     map[uint64][]chan struct{}
-
 	// protects 4 next fields
 	lastLock sync.Mutex
 
@@ -177,56 +171,4 @@ func (r *raftState) getLastEntry() (uint64, uint64) {
 		return r.lastLogIndex, r.lastLogTerm
 	}
 	return r.lastSnapshotIndex, r.lastSnapshotTerm
-}
-
-func (r *raftState) getFSMApplied() uint64 {
-	return atomic.LoadUint64(&r.fsmApplied)
-}
-
-func (r *raftState) setFSMApplied(index uint64) {
-	atomic.StoreUint64(&r.fsmApplied, index)
-	r.fsmWaitersLock.Lock()
-	defer r.fsmWaitersLock.Unlock()
-	if len(r.fsmWaiters) == 0 {
-		return
-	}
-	for targetIdx, chans := range r.fsmWaiters {
-		if index >= targetIdx {
-			for _, ch := range chans {
-				select {
-				case ch <- struct{}{}:
-				default:
-				}
-				close(ch)
-			}
-			delete(r.fsmWaiters, targetIdx)
-		}
-	}
-}
-
-func (r *raftState) registerFSMWaiter(targetIndex uint64, ch chan struct{}) {
-	r.fsmWaitersLock.Lock()
-	defer r.fsmWaitersLock.Unlock()
-	if r.fsmWaiters == nil {
-		r.fsmWaiters = make(map[uint64][]chan struct{})
-	}
-	r.fsmWaiters[targetIndex] = append(r.fsmWaiters[targetIndex], ch)
-}
-
-func (r *raftState) unregisterFSMWaiter(targetIndex uint64, targetCh chan struct{}) {
-	r.fsmWaitersLock.Lock()
-	defer r.fsmWaitersLock.Unlock()
-	chans, ok := r.fsmWaiters[targetIndex]
-	if !ok {
-		return
-	}
-	for i, ch := range chans {
-		if ch == targetCh {
-			r.fsmWaiters[targetIndex] = append(chans[:i], chans[i+1:]...)
-			break
-		}
-	}
-	if len(r.fsmWaiters[targetIndex]) == 0 {
-		delete(r.fsmWaiters, targetIndex)
-	}
 }
